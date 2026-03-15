@@ -11,16 +11,16 @@ input.onButtonPressed(Button.AB, function () {
 let isLogging = false
 let result = ""
 serial.redirectToUSB()
-Gamepad.startBroadcast(1, Frequencies.TwoFiftyHz)
-Gamepad.stopBroadcast()
+Gamepadex.startBroadcast(1, Frequencies.TwoFiftyHz)
+Gamepadex.stopBroadcast()
 basic.forever(function () {
     if (isLogging) {
-        serial.writeLine("" + (toBinary32(Gamepad.getGamepadState() & (ComponentMasks.Buttons | ComponentMasks.Orientation))))
-        serial.writeValue("Buttons: ", Gamepad.getGamepadState() & ComponentMasks.Buttons)
-        serial.writeValue("Stick X: ", (Gamepad.getGamepadState() & ComponentMasks.HorizontalStick) >>> 8)
-        serial.writeValue("Stick Y: ", (Gamepad.getGamepadState() & ComponentMasks.VerticalStick) >>> 16)
-        serial.writeValue("Orientation: ", (Gamepad.getGamepadState() & ComponentMasks.Orientation) >>> 24)
-        if (Gamepad.isOrientated(GestureFlags.Shake)) {
+        serial.writeLine("" + (toBinary32(Gamepadex.getGamepadState() & (ComponentMasks.Buttons | ComponentMasks.Orientation))))
+        serial.writeValue("Buttons: ", Gamepadex.getGamepadState() & ComponentMasks.Buttons)
+        serial.writeValue("Stick X: ", (Gamepadex.getGamepadState() & ComponentMasks.HorizontalStick) >>> 8)
+        serial.writeValue("Stick Y: ", (Gamepadex.getGamepadState() & ComponentMasks.VerticalStick) >>> 16)
+        serial.writeValue("Orientation: ", (Gamepadex.getGamepadState() & ComponentMasks.Orientation) >>> 24)
+        if (Gamepadex.isOrientated(GestureFlags.Shake)) {
             radio.sendValue("name", 0)
             radio.sendNumber(0)
         }
