@@ -259,12 +259,12 @@ namespace Gamepadex {
             | (input.isGesture(Gesture.ScreenDown) ? GestureFlags.ScreenDown : 0)
             | (input.isGesture(Gesture.TiltLeft) ? GestureFlags.TiltLeft : 0)
             | (input.isGesture(Gesture.TiltRight) ? GestureFlags.TiltRight : 0)
-            | (
+            | ((
                    (input.isGesture(Gesture.ThreeG) ? 1 : 0)
                 | (input.isGesture(Gesture.SixG) ? 1 : 0)
                 | (input.isGesture(Gesture.EightG) ? 1 : 0)
                 | (input.isGesture(Gesture.FreeFall) ? 1 : 0)
-                ) ? GestureFlags.Falling : 0
+                ) ? GestureFlags.Falling : 0)
             ) & ComponentMasks.Orientation
         }
 
