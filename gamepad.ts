@@ -155,7 +155,7 @@ namespace Gamepadex {
 
         isRunning = true
 
-        radio.onReceivedNumber(function (receivedNumber: uint32){
+        radio.onReceivedNumber(function (receivedNumber: number){
             _gamepadStatus = receivedNumber
         })
     }

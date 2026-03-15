@@ -1,7 +1,14 @@
-function toBinary32 (n: number) {
+function toBinary32 (n: number) : string {
+    let result = ""
+
+    n = n >>> 0
+    
     for (let i = 31; i >= 0; i--) {
-        let bit = (n >> i) & 1
+        let bit = ((n >> i) & 1) > 0 ? "1" : "0" 
         result = result + bit
+        if (i % 8 == 0 && i != 0) {
+            result = result + "-"
+        }
     }
 return result
 }
@@ -15,7 +22,7 @@ Gamepadex.startBroadcast(1, Frequencies.TwoFiftyHz)
 Gamepadex.stopBroadcast()
 basic.forever(function () {
     if (isLogging) {
-        serial.writeLine("" + (toBinary32(Gamepadex.getGamepadState() & (ComponentMasks.Buttons | ComponentMasks.Orientation))))
+        serial.writeLine(" " + (toBinary32(Gamepadex.getGamepadState() & (ComponentMasks.Buttons | ComponentMasks.Orientation))))
         serial.writeValue("Buttons: ", Gamepadex.getGamepadState() & ComponentMasks.Buttons)
         serial.writeValue("Stick X: ", (Gamepadex.getGamepadState() & ComponentMasks.HorizontalStick) >>> 8)
         serial.writeValue("Stick Y: ", (Gamepadex.getGamepadState() & ComponentMasks.VerticalStick) >>> 16)
