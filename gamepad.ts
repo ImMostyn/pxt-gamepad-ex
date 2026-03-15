@@ -68,10 +68,10 @@ enum ComponentMasks {
 }
 
 enum BytePositions {
-    Buttons = 0x00,
-    HorizontalStick = 0x00000100,
-    VerticalStick = 0x00010000,
-    Orientation = 0x01000000
+    Buttons = 0,
+    HorizontalStick = 8,
+    VerticalStick = 16,
+    Orientation = 24
 }
 
 /**
@@ -106,7 +106,7 @@ namespace Gamepadex {
             _radioGroup = radioGroup
             _frequency = frequency
 
-            radio.setGroup(1)
+            radio.setGroup(_radioGroup)
             pins.setPull(DigitalPin.P8, PinPullMode.PullNone)
             pins.setPull(DigitalPin.P13, PinPullMode.PullNone)
             pins.setPull(DigitalPin.P14, PinPullMode.PullNone)
@@ -182,7 +182,7 @@ namespace Gamepadex {
     //% block="Gamepad Joystick X position"
     //% group="Receiver"
     export function joystickX(): number {
-        return (_gamepadStatus & ComponentMasks.HorizontalStick >>> 8)
+        return ((_gamepadStatus & ComponentMasks.HorizontalStick) >>> 8)
     }
 
     /**
@@ -191,7 +191,7 @@ namespace Gamepadex {
     //% block="Gamepad Joystick Y position"
     //% group="Receiver"
     export function joystickY(): number {
-        return (_gamepadStatus & ComponentMasks.VerticalStick >>> 16)
+        return ((_gamepadStatus & ComponentMasks.VerticalStick) >>> 16)
     }
 
     /**
@@ -229,7 +229,7 @@ namespace Gamepadex {
         if (byteX > (128 - _deadzone) && byteX < (128 + _deadzone)) {
             byteX = 128
         }
-        return byteX << 8 & ComponentMasks.HorizontalStick
+        return byteX << BytePositions.HorizontalStick & ComponentMasks.HorizontalStick
         }
 
     /**
@@ -247,10 +247,10 @@ namespace Gamepadex {
         if (byteY > (128 - _deadzone) && byteY < (128 + _deadzone)) {
             byteY = 128
         }
-        return byteY << 16 & ComponentMasks.VerticalStick
+        return byteY << BytePositions.VerticalStick & ComponentMasks.VerticalStick
         }
 
-    function readOriention(): uint32 {
+    function readOrientation(): uint32 {
         return (
                (input.isGesture(Gesture.Shake) ? GestureFlags.Shake : 0)
             | (input.isGesture(Gesture.LogoUp) ? GestureFlags.LogoUp : 0)
@@ -269,7 +269,7 @@ namespace Gamepadex {
         }
 
     function packGamepadFlags(): uint32 {
-        return readButtons() | conditionStickX() | conditionStickY() | readOriention();
+        return readButtons() | conditionStickX() | conditionStickY() | readOrientation();
     }
 
     /**
