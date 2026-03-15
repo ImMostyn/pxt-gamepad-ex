@@ -1,6 +1,6 @@
 {
-    "name": "gamepad - Copy",
-    "description": "",
+    "name": "gamepad-ex",
+    "description": "This extension adds gamepad support to the micro:bit. It allows you to connect a gamepad to the micro:bit and use it to control your projects.",
     "dependencies": {
         "core": "*",
         "radio": "*",

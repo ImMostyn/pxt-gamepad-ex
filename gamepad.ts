@@ -79,8 +79,8 @@ enum BytePositions {
  * This version is configured to support the DFRobot Gamepad for micro:bit v4.0
  * https://wiki.dfrobot.com/dfr0536/#tech_specs
  */
-//% weight=100 color=#ff8000 icon="\uf11b"
-namespace Gamepad {
+//% weight=100 color=#ff8000 icon="\uf11b" name="Gamepad"
+namespace Gamepadex {
 
     let isRunning = false
     let mode = OperatingMode.NotConfigured
@@ -155,7 +155,7 @@ namespace Gamepad {
 
         isRunning = true
 
-        radio.onReceivedNumber(function (receivedNumber){
+        radio.onReceivedNumber(function (receivedNumber: uint32){
             _gamepadStatus = receivedNumber
         })
     }
