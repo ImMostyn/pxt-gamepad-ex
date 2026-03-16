@@ -20,7 +20,9 @@ enum Frequencies {
     //% block="Fast (250 Hz)"
     TwoFiftyHz = 4,
     //% block="Superfly (500 Hz)"
-    FiveHundredHz =2
+    FiveHundredHz =2,
+    //% block="Debug (2 Hz)"
+    Debug = 500
 }
 
 enum ButtonFlag {
@@ -127,8 +129,8 @@ namespace Gamepadex {
 
         control.inBackground(() => {
             while (isBroadcasting) {
-                console.log(getGamepadState())
-                radio.sendNumber(getGamepadState())
+                //console.log(getGamepadState())
+                radio.sendNumber(packedGamepadState())
                 basic.pause(_frequency)
             }
         })
@@ -175,6 +177,7 @@ namespace Gamepadex {
         }
 
         radio.onReceivedNumber(function (receivedNumber: number){
+            //serial.writeLine("Ack: " + receivedNumber)
             _gamepadStatus = receivedNumber
         })
     }
@@ -195,6 +198,26 @@ namespace Gamepadex {
         }
     }
 
+    /**
+     * The registers of the gamepad state broadcast
+     */
+    //% block="gamepad state"
+    //% group="Receiver"
+    //% advanced=true
+    export function gamepadStatus(): uint32 {
+        return _gamepadStatus
+    }
+
+    /**
+     * The mode of the gamepad object on this micro:bit
+     */
+    //% block="operating mode"
+    //% group="Receiver"
+    //% advanced=true
+    export function operatingMode(): OperatingMode {
+        return mode
+    }
+    
     /**
      * Read the pins related to buttons
      * and pack into register of gamepad flags
@@ -264,7 +287,7 @@ namespace Gamepadex {
         if (byteX > (128 - _deadzone) && byteX < (128 + _deadzone)) {
             byteX = 128
         }
-        return byteX << BytePositions.HorizontalStick & ComponentMasks.HorizontalStick
+        return (byteX << BytePositions.HorizontalStick) & ComponentMasks.HorizontalStick
         }
 
     /**
@@ -282,7 +305,7 @@ namespace Gamepadex {
         if (byteY > (128 - _deadzone) && byteY < (128 + _deadzone)) {
             byteY = 128
         }
-        return byteY << BytePositions.VerticalStick & ComponentMasks.VerticalStick
+        return (byteY << BytePositions.VerticalStick) & ComponentMasks.VerticalStick
         }
 
     function readOrientation(): uint32 {
@@ -312,7 +335,7 @@ namespace Gamepadex {
      */
     //% block
     //% group="Sender"
-    export function getGamepadState(): uint32 {
+    export function packedGamepadState(): uint32 {
         // Add code here
         return packGamepadFlags()
     }

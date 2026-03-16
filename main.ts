@@ -1,3 +1,9 @@
+radio.onReceivedNumber(function (receivedNumber) {
+    if (isAudible) {
+        music.play(music.tonePlayable(262, music.beat(BeatFraction.Sixteenth)), music.PlaybackMode.InBackground)
+    }
+    basic.showIcon(IconNames.Heart)
+})
 function toBinary32 (n: number) {
     result = ""
     n = n >>> 0;
@@ -12,27 +18,51 @@ for (let i = 31; i >= 0; i--) {
 return result
 }
 input.onButtonPressed(Button.AB, function () {
+    basic.showIcon(IconNames.Surprised)
     isLogging = !(isLogging)
+    if (isLogging) {
+        serial.redirectToUSB()
+        basic.showIcon(IconNames.Happy)
+    }
+    basic.pause(2000)
+    basic.clearScreen()
+})
+input.onLogoEvent(TouchButtonEvent.Pressed, function () {
+    if (isGamepad) {
+        Gamepadex.stopBroadcast()
+    } else {
+        Gamepadex.stopReceiving()
+    }
+    if (isAudible) {
+        music.play(music.builtinPlayableSoundEffect(soundExpression.yawn), music.PlaybackMode.UntilDone)
+    }
+    basic.showIcon(IconNames.Asleep)
 })
 let isLogging = false
-let result3 = ""
-let result2 = ""
+let isGamepad = false
+let isAudible = false
 let result = ""
-serial.redirectToUSB()
-Gamepadex.startBroadcast(1, Frequencies.TwoFiftyHz)
-Gamepadex.stopBroadcast()
+isAudible = false
+isGamepad = control.deviceName() == "zeviz"
+if (isGamepad) {
+    basic.showIcon(IconNames.Sword)
+    Gamepadex.startBroadcast(1, Frequencies.Debug)
+} else {
+    basic.showIcon(IconNames.Fabulous)
+    Gamepadex.startReceiving(1)
+}
+basic.showIcon(IconNames.Yes)
+basic.pause(2000)
 basic.forever(function () {
     if (isLogging) {
-        serial.writeNumber(Gamepadex.joystickY())
-        serial.writeLine("" + (toBinary32(Gamepadex.getGamepadState() & (ComponentMasks.Buttons | ComponentMasks.Orientation))))
-        serial.writeValue("Buttons: ", Gamepadex.getGamepadState() & ComponentMasks.Buttons)
-        serial.writeValue("Stick X: ", (Gamepadex.getGamepadState() & ComponentMasks.HorizontalStick) >>> 8)
-        serial.writeValue("Stick Y: ", (Gamepadex.getGamepadState() & ComponentMasks.VerticalStick) >>> 16)
-        serial.writeValue("Orientation: ", (Gamepadex.getGamepadState() & ComponentMasks.Orientation) >>> 24)
+        if (isGamepad) {
+            serial.writeLine("packed gamepad state: " + toBinary32(Gamepadex.packedGamepadState()))
+        } else {
+            serial.writeLine("recvd state: " + toBinary32(Gamepadex.gamepadStatus()))
+            serial.writeLine("Red: " + Gamepadex.isPressed(ButtonFlag.RedButton) + " Green: " + Gamepadex.isPressed(ButtonFlag.GreenButton) + " Blue: " + Gamepadex.isPressed(ButtonFlag.BlueButton) + " Yellow: " + Gamepadex.isPressed(ButtonFlag.YellowButton) + " A: " + Gamepadex.isPressed(ButtonFlag.AButton) + " B: " + Gamepadex.isPressed(ButtonFlag.BButton))
+            serial.writeLine("recvd StickX: " + Gamepadex.joystickX())
+            serial.writeLine("recvd StickY: " + Gamepadex.joystickY())
+        }
     }
-    if (Gamepadex.isOrientated(GestureFlags.Shake)) {
-        radio.sendValue("name", 0)
-        radio.sendNumber(0)
-    }
-    basic.pause(100)
+    basic.pause(500)
 })
