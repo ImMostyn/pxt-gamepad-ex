@@ -182,7 +182,7 @@ namespace Gamepadex {
     //% block="Gamepad Joystick X position"
     //% group="Receiver"
     export function joystickX(): number {
-        return ((_gamepadStatus & ComponentMasks.HorizontalStick) >>> 8)
+        return ((_gamepadStatus & ComponentMasks.HorizontalStick) >>> BytePositions.HorizontalStick)
     }
 
     /**
@@ -191,7 +191,7 @@ namespace Gamepadex {
     //% block="Gamepad Joystick Y position"
     //% group="Receiver"
     export function joystickY(): number {
-        return ((_gamepadStatus & ComponentMasks.VerticalStick) >>> 16)
+        return ((_gamepadStatus & ComponentMasks.VerticalStick) >>> BytePositions.VerticalStick)
     }
 
     /**
