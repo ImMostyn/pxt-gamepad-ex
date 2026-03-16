@@ -8,7 +8,8 @@
 enum OperatingMode {
     NotConfigured,
     Gamepad,
-    Receiver
+    Receiver,
+    GamepadAndReceiver
 }
 
 enum Frequencies {
@@ -82,7 +83,8 @@ enum BytePositions {
 //% weight=100 color=#ff8000 icon="\uf11b" name="Gamepad"
 namespace Gamepadex {
 
-    let isRunning = false
+    let isBroadcasting = false
+    let isListening = false
     let mode = OperatingMode.NotConfigured
 
     let _radioGroup = 1
@@ -100,9 +102,9 @@ namespace Gamepadex {
     //% frequency.defl=Frequencies.TwoFiftyHz
     //% group="Sender"
     export function startBroadcast(radioGroup?: number, frequency?: Frequencies): void {
-        if (isRunning) return
+        if (isBroadcasting) return
 
-        if (mode != OperatingMode.Gamepad){
+        if (mode == OperatingMode.NotConfigured || mode == OperatingMode.Receiver) {
             _radioGroup = radioGroup
             _frequency = frequency
 
@@ -112,14 +114,19 @@ namespace Gamepadex {
             pins.setPull(DigitalPin.P14, PinPullMode.PullNone)
             pins.setPull(DigitalPin.P15, PinPullMode.PullNone)
             pins.setPull(DigitalPin.P16, PinPullMode.PullNone)
+        }
 
+        isBroadcasting = true
+
+        // Update mode based on current state
+        if (isListening) {
+            mode = OperatingMode.GamepadAndReceiver
+        } else {
             mode = OperatingMode.Gamepad
         }
 
-        isRunning = true
-
         control.inBackground(() => {
-            while (isRunning) {
+            while (isBroadcasting) {
                 console.log(getGamepadState())
                 radio.sendNumber(getGamepadState())
                 basic.pause(_frequency)
@@ -133,7 +140,14 @@ namespace Gamepadex {
     //% block="Stop Broadcast Gamepad"
     //% group="Sender"
     export function stopBroadcast(): void {
-        isRunning = false
+        isBroadcasting = false
+        
+        // Update mode
+        if (isListening) {
+            mode = OperatingMode.Receiver
+        } else {
+            mode = OperatingMode.NotConfigured
+        }
     }
 
     /**
@@ -143,21 +157,42 @@ namespace Gamepadex {
     //% radioGroup.defl=1 radioGroup.min = 1 radioGroup.max = 255
     //% group="Receiver"
     export function startReceiving(radioGroup?: number): void {
-        if (isRunning) return
+        if (isListening) return
 
-        if (mode != OperatingMode.Receiver) {
+        if (mode == OperatingMode.NotConfigured || mode == OperatingMode.Gamepad) {
             _radioGroup = radioGroup
 
             radio.setGroup(_radioGroup)
-
-            mode = OperatingMode.Receiver
         }
 
-        isRunning = true
+        isListening = true
+
+        // Update mode based on current state
+        if (isBroadcasting) {
+            mode = OperatingMode.GamepadAndReceiver
+        } else {
+            mode = OperatingMode.Receiver
+        }
 
         radio.onReceivedNumber(function (receivedNumber: number){
             _gamepadStatus = receivedNumber
         })
+    }
+
+    /**
+     * Stop receiving Gamepad status messages
+     */
+    //% block="Stop Receive Gamepad"
+    //% group="Receiver"
+    export function stopReceiving(): void {
+        isListening = false
+        
+        // Update mode
+        if (isBroadcasting) {
+            mode = OperatingMode.Gamepad
+        } else {
+            mode = OperatingMode.NotConfigured
+        }
     }
 
     /**
