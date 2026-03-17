@@ -93,8 +93,12 @@ namespace Gamepadex {
     let _frequency = Frequencies.TwoFiftyHz
 
     let _gamepadStatus = 0
+    let _lastGamepadStatus = 0
 
     let _deadzone = 4
+
+    // Event bus constants for button click events
+    const GAMEPAD_BUTTON_CLICKED_EVENT_ID = 8800
 
     /**
      * Broadcast Gamepad status
@@ -179,6 +183,7 @@ namespace Gamepadex {
         radio.onReceivedNumber(function (receivedNumber: number){
             //serial.writeLine("Ack: " + receivedNumber)
             _gamepadStatus = receivedNumber
+            detectButtonClicks()
         })
     }
 
@@ -196,6 +201,37 @@ namespace Gamepadex {
         } else {
             mode = OperatingMode.NotConfigured
         }
+    }
+
+    /**
+     * Detect button state changes and fire click events
+     */
+    function detectButtonClicks(): void {
+        // Check each button bit to see if it transitioned from 0 to 1
+        for (let i = 0; i < 8; i++) {
+            const buttonBit = 1 << i
+            const wasPressed = !!(_lastGamepadStatus & buttonBit)
+            const isNowPressed = !!(_gamepadStatus & buttonBit)
+            
+            // Detect 0 -> 1 transition (button clicked)
+            if (!wasPressed && isNowPressed) {
+                control.raiseEvent(GAMEPAD_BUTTON_CLICKED_EVENT_ID, buttonBit)
+            }
+        }
+        
+        // Update tracking variable
+        _lastGamepadStatus = _gamepadStatus
+    }
+
+    /**
+     * On Gamepad button clicked
+     */
+    //% block="on Gamepad | $button | clicked"
+    //% button.defl=ButtonFlag.GreenButton
+    //% group="Receiver"
+    //% blockGap=8
+    export function onGamepadButtonClicked(button: ButtonFlag, handler: () => void): void {
+        control.onEvent(GAMEPAD_BUTTON_CLICKED_EVENT_ID, button, handler)
     }
 
     /**
