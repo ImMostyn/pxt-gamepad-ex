@@ -107,6 +107,7 @@ namespace Gamepadex {
     const DOUBLE_CLICK_WINDOW_MS = 300
 
     // Per-button tracking for click/double-click detection
+    let _lastPressTime: number[] = [0, 0, 0, 0, 0, 0, 0, 0]
     let _lastReleaseTime: number[] = [0, 0, 0, 0, 0, 0, 0, 0]
     let _clickCount: number[] = [0, 0, 0, 0, 0, 0, 0, 0]
     let _pendingClickTime: number[] = [0, 0, 0, 0, 0, 0, 0, 0]
@@ -238,6 +239,7 @@ namespace Gamepadex {
             
             // Detect 0 -> 1 transition (button pressed)
             if (!wasPressed && isNowPressed) {
+                _lastPressTime[i] = currentTime
                 control.raiseEvent(GAMEPAD_BUTTON_PRESSED_EVENT_ID, buttonBit)
             }
             
@@ -245,22 +247,28 @@ namespace Gamepadex {
             if (wasPressed && !isNowPressed) {
                 control.raiseEvent(GAMEPAD_BUTTON_RELEASED_EVENT_ID, buttonBit)
                 
-                // Handle click/double-click detection on release
-                const timeSinceLastRelease = currentTime - _lastReleaseTime[i]
+                // Calculate how long the button was held
+                const pressDuration = currentTime - _lastPressTime[i]
                 
-                // Clear any pending click for this button
-                _pendingClickTime[i] = 0
-                
-                if (timeSinceLastRelease <= DOUBLE_CLICK_WINDOW_MS) {
-                    // Second release within window - it's a double-click
-                    _clickCount[i] = 0
-                    _lastReleaseTime[i] = 0
-                    control.raiseEvent(GAMEPAD_BUTTON_DOUBLECLICKED_EVENT_ID, buttonBit)
-                } else {
-                    // First release in new window - schedule single click event
-                    _clickCount[i] = 1
-                    _lastReleaseTime[i] = currentTime
-                    _pendingClickTime[i] = currentTime + DOUBLE_CLICK_WINDOW_MS
+                // Only consider clicks if held briefly (< 300ms)
+                if (pressDuration <= DOUBLE_CLICK_WINDOW_MS) {
+                    // Handle click/double-click detection on release
+                    const timeSinceLastRelease = currentTime - _lastReleaseTime[i]
+                    
+                    // Clear any pending click for this button
+                    _pendingClickTime[i] = 0
+                    
+                    if (timeSinceLastRelease <= DOUBLE_CLICK_WINDOW_MS) {
+                        // Second release within window - it's a double-click
+                        _clickCount[i] = 0
+                        _lastReleaseTime[i] = 0
+                        control.raiseEvent(GAMEPAD_BUTTON_DOUBLECLICKED_EVENT_ID, buttonBit)
+                    } else {
+                        // First release in new window - schedule single click event
+                        _clickCount[i] = 1
+                        _lastReleaseTime[i] = currentTime
+                        _pendingClickTime[i] = currentTime + DOUBLE_CLICK_WINDOW_MS
+                    }
                 }
             }
         }
