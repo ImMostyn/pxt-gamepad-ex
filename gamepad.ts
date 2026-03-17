@@ -82,7 +82,7 @@ enum BytePositions {
  * This version is configured to support the DFRobot Gamepad for micro:bit v4.0
  * https://wiki.dfrobot.com/dfr0536/#tech_specs
  */
-//% weight=100 color=#ff8000 icon="\uf11b" name="Gamepad"
+//% weight=100 color=#ff8000 icon="\uf11b" block="Gamepad"
 namespace Gamepadex {
 
     let isBroadcasting = false
