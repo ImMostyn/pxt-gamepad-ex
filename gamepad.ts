@@ -97,8 +97,17 @@ namespace Gamepadex {
 
     let _deadzone = 4
 
-    // Event bus constants for button click events
+    // Event bus constants for button events
     const GAMEPAD_BUTTON_CLICKED_EVENT_ID = 8800
+    const GAMEPAD_BUTTON_PRESSED_EVENT_ID = 8801
+    const GAMEPAD_BUTTON_DOUBLECLICKED_EVENT_ID = 8802
+
+    // Double-click configuration
+    const DOUBLE_CLICK_WINDOW_MS = 300
+
+    // Per-button tracking for double-click detection
+    let _lastClickTime: number[] = [0, 0, 0, 0, 0, 0, 0, 0]
+    let _clickCount: number[] = [0, 0, 0, 0, 0, 0, 0, 0]
 
     /**
      * Broadcast Gamepad status
@@ -204,18 +213,36 @@ namespace Gamepadex {
     }
 
     /**
-     * Detect button state changes and fire click events
+     * Detect button state changes and fire events
      */
     function detectButtonClicks(): void {
-        // Check each button bit to see if it transitioned from 0 to 1
+        // Check each button bit to see state transitions
         for (let i = 0; i < 8; i++) {
             const buttonBit = 1 << i
             const wasPressed = !!(_lastGamepadStatus & buttonBit)
             const isNowPressed = !!(_gamepadStatus & buttonBit)
             
-            // Detect 0 -> 1 transition (button clicked)
+            // Detect 0 -> 1 transition (button pressed)
             if (!wasPressed && isNowPressed) {
-                control.raiseEvent(GAMEPAD_BUTTON_CLICKED_EVENT_ID, buttonBit)
+                // Fire button pressed event
+                control.raiseEvent(GAMEPAD_BUTTON_PRESSED_EVENT_ID, buttonBit)
+                
+                // Handle double-click detection
+                const currentTime = control.millis()
+                const timeSinceLastClick = currentTime - _lastClickTime[i]
+                
+                if (timeSinceLastClick <= DOUBLE_CLICK_WINDOW_MS) {
+                    // Second click within window - fire double-click event
+                    _clickCount[i] = 0
+                    _lastClickTime[i] = 0
+                    control.raiseEvent(GAMEPAD_BUTTON_DOUBLECLICKED_EVENT_ID, buttonBit)
+                } else {
+                    // First click in new window
+                    _clickCount[i] = 1
+                    _lastClickTime[i] = currentTime
+                    // Fire single click event (may be upgraded to double-click later)
+                    control.raiseEvent(GAMEPAD_BUTTON_CLICKED_EVENT_ID, buttonBit)
+                }
             }
         }
         
@@ -232,6 +259,28 @@ namespace Gamepadex {
     //% blockGap=8
     export function onGamepadButtonClicked(button: ButtonFlag, handler: () => void): void {
         control.onEvent(GAMEPAD_BUTTON_CLICKED_EVENT_ID, button, handler)
+    }
+
+    /**
+     * On Gamepad button pressed
+     */
+    //% block="on Gamepad | $button | pressed"
+    //% button.defl=ButtonFlag.GreenButton
+    //% group="Receiver"
+    //% blockGap=8
+    export function onGamepadButtonPressed(button: ButtonFlag, handler: () => void): void {
+        control.onEvent(GAMEPAD_BUTTON_PRESSED_EVENT_ID, button, handler)
+    }
+
+    /**
+     * On Gamepad button double-clicked
+     */
+    //% block="on Gamepad | $button | double-clicked"
+    //% button.defl=ButtonFlag.GreenButton
+    //% group="Receiver"
+    //% blockGap=8
+    export function onGamepadButtonDoubleClicked(button: ButtonFlag, handler: () => void): void {
+        control.onEvent(GAMEPAD_BUTTON_DOUBLECLICKED_EVENT_ID, button, handler)
     }
 
     /**
