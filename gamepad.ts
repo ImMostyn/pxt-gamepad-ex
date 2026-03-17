@@ -93,8 +93,23 @@ namespace Gamepadex {
     let _frequency = Frequencies.TwoFiftyHz
 
     let _gamepadStatus = 0
+    let _lastGamepadStatus = 0
 
     let _deadzone = 4
+
+    // Event bus constants for button events
+    const GAMEPAD_BUTTON_PRESSED_EVENT_ID = 8800
+    const GAMEPAD_BUTTON_RELEASED_EVENT_ID = 8801
+    const GAMEPAD_BUTTON_CLICKED_EVENT_ID = 8802
+    const GAMEPAD_BUTTON_DOUBLECLICKED_EVENT_ID = 8803
+
+    // Double-click configuration
+    const DOUBLE_CLICK_WINDOW_MS = 300
+
+    // Per-button tracking for click/double-click detection
+    let _lastReleaseTime: number[] = [0, 0, 0, 0, 0, 0, 0, 0]
+    let _clickCount: number[] = [0, 0, 0, 0, 0, 0, 0, 0]
+    let _pendingClickTime: number[] = [0, 0, 0, 0, 0, 0, 0, 0]
 
     /**
      * Broadcast Gamepad status
@@ -179,6 +194,7 @@ namespace Gamepadex {
         radio.onReceivedNumber(function (receivedNumber: number){
             //serial.writeLine("Ack: " + receivedNumber)
             _gamepadStatus = receivedNumber
+            detectButtonClicks()
         })
     }
 
@@ -196,6 +212,105 @@ namespace Gamepadex {
         } else {
             mode = OperatingMode.NotConfigured
         }
+    }
+
+    /**
+     * Detect button state changes and fire events
+     */
+    function detectButtonClicks(): void {
+        const currentTime = control.millis()
+        
+        // Check for any pending clicks that have expired
+        for (let i = 0; i < 8; i++) {
+            if (_pendingClickTime[i] > 0 && currentTime >= _pendingClickTime[i]) {
+                if (_clickCount[i] === 1) {
+                    control.raiseEvent(GAMEPAD_BUTTON_CLICKED_EVENT_ID, 1 << i)
+                }
+                _pendingClickTime[i] = 0
+            }
+        }
+        
+        // Check each button bit to see state transitions
+        for (let i = 0; i < 8; i++) {
+            const buttonBit = 1 << i
+            const wasPressed = !!(_lastGamepadStatus & buttonBit)
+            const isNowPressed = !!(_gamepadStatus & buttonBit)
+            
+            // Detect 0 -> 1 transition (button pressed)
+            if (!wasPressed && isNowPressed) {
+                control.raiseEvent(GAMEPAD_BUTTON_PRESSED_EVENT_ID, buttonBit)
+            }
+            
+            // Detect 1 -> 0 transition (button released)
+            if (wasPressed && !isNowPressed) {
+                control.raiseEvent(GAMEPAD_BUTTON_RELEASED_EVENT_ID, buttonBit)
+                
+                // Handle click/double-click detection on release
+                const timeSinceLastRelease = currentTime - _lastReleaseTime[i]
+                
+                // Clear any pending click for this button
+                _pendingClickTime[i] = 0
+                
+                if (timeSinceLastRelease <= DOUBLE_CLICK_WINDOW_MS) {
+                    // Second release within window - it's a double-click
+                    _clickCount[i] = 0
+                    _lastReleaseTime[i] = 0
+                    control.raiseEvent(GAMEPAD_BUTTON_DOUBLECLICKED_EVENT_ID, buttonBit)
+                } else {
+                    // First release in new window - schedule single click event
+                    _clickCount[i] = 1
+                    _lastReleaseTime[i] = currentTime
+                    _pendingClickTime[i] = currentTime + DOUBLE_CLICK_WINDOW_MS
+                }
+            }
+        }
+        
+        // Update tracking variable
+        _lastGamepadStatus = _gamepadStatus
+    }
+
+    /**
+     * On Gamepad button pressed
+     */
+    //% block="on Gamepad | $button | pressed"
+    //% button.defl=ButtonFlag.GreenButton
+    //% group="Receiver"
+    //% blockGap=8
+    export function onGamepadButtonPressed(button: ButtonFlag, handler: () => void): void {
+        control.onEvent(GAMEPAD_BUTTON_PRESSED_EVENT_ID, button, handler)
+    }
+
+    /**
+     * On Gamepad button released
+     */
+    //% block="on Gamepad | $button | released"
+    //% button.defl=ButtonFlag.GreenButton
+    //% group="Receiver"
+    //% blockGap=8
+    export function onGamepadButtonReleased(button: ButtonFlag, handler: () => void): void {
+        control.onEvent(GAMEPAD_BUTTON_RELEASED_EVENT_ID, button, handler)
+    }
+
+    /**
+     * On Gamepad button clicked
+     */
+    //% block="on Gamepad | $button | clicked"
+    //% button.defl=ButtonFlag.GreenButton
+    //% group="Receiver"
+    //% blockGap=8
+    export function onGamepadButtonClicked(button: ButtonFlag, handler: () => void): void {
+        control.onEvent(GAMEPAD_BUTTON_CLICKED_EVENT_ID, button, handler)
+    }
+
+    /**
+     * On Gamepad button double-clicked
+     */
+    //% block="on Gamepad | $button | double-clicked"
+    //% button.defl=ButtonFlag.GreenButton
+    //% group="Receiver"
+    //% blockGap=8
+    export function onGamepadButtonDoubleClicked(button: ButtonFlag, handler: () => void): void {
+        control.onEvent(GAMEPAD_BUTTON_DOUBLECLICKED_EVENT_ID, button, handler)
     }
 
     /**
