@@ -76,7 +76,7 @@ basic.forever(function () {
         strip.clear()
         for (let index = 0; index <= 29; index++) {
             if (Math.map(index, 0, 29, 0, 255) <= Gamepadex.joystickX()) {
-                strip.setPixelColor(0, neopixel.colors(NeoPixelColors.Red))
+                strip.setPixelColor(0, neopixel.hsl(Math.map(Gamepadex.joystickY(), 0, 255, 0, 360), 100, Math.map(index, 0, 29, 10, 100)))
             }
             strip.shift(1)
         }
