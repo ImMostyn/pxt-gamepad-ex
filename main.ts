@@ -53,6 +53,11 @@ if (isGamepad) {
 }
 basic.showIcon(IconNames.Yes)
 basic.pause(2000)
+let strip = neopixel.create(DigitalPin.P0, 30, NeoPixelMode.RGB)
+strip.showRainbow(1, 360)
+strip.show()
+basic.pause(2000)
+let isLit = true
 basic.forever(function () {
     if (isLogging) {
         if (isGamepad) {
@@ -65,4 +70,17 @@ basic.forever(function () {
         }
     }
     basic.pause(500)
+})
+basic.forever(function () {
+    if (isLit) {
+        strip.clear()
+        for (let index = 0; index <= 29; index++) {
+            if (Math.map(index, 0, 29, 0, 255) <= Gamepadex.joystickX()) {
+                strip.setPixelColor(0, neopixel.hsl(Math.map(Gamepadex.joystickY(), 0, 255, 0, 360), 100, Math.map(index, 0, 29, 10, 100)))
+            }
+            strip.shift(1)
+        }
+        strip.show()
+    }
+    basic.pause(100)
 })
