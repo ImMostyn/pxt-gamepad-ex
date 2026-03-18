@@ -111,6 +111,7 @@ namespace Gamepadex {
     let _lastReleaseTime: number[] = [0, 0, 0, 0, 0, 0, 0, 0]
     let _clickCount: number[] = [0, 0, 0, 0, 0, 0, 0, 0]
     let _pendingClickTime: number[] = [0, 0, 0, 0, 0, 0, 0, 0]
+    let _clickDetectorRunning = false
 
     /**
      * Broadcast Gamepad status
@@ -195,7 +196,11 @@ namespace Gamepadex {
         radio.onReceivedNumber(function (receivedNumber: number){
             //serial.writeLine("Ack: " + receivedNumber)
             _gamepadStatus = receivedNumber
-            detectButtonClicks()
+            
+            // Start click detector if not already running
+            if (!_clickDetectorRunning) {
+                startClickDetector()
+            }
         })
     }
 
@@ -206,6 +211,7 @@ namespace Gamepadex {
     //% group="Receiver"
     export function stopReceiving(): void {
         isListening = false
+        _clickDetectorRunning = false
         
         // Update mode
         if (isBroadcasting) {
@@ -216,9 +222,24 @@ namespace Gamepadex {
     }
 
     /**
-     * Detect button state changes and fire events
+     * Start the background click detector
      */
-    function detectButtonClicks(): void {
+    function startClickDetector(): void {
+        if (_clickDetectorRunning) return
+        _clickDetectorRunning = true
+        
+        control.inBackground(function() {
+            while (_clickDetectorRunning && isListening) {
+                processButtonClicks()
+                basic.pause(5)  // Check every 5ms
+            }
+        })
+    }
+
+    /**
+     * Process button state changes and fire events
+     */
+    function processButtonClicks(): void {
         const currentTime = control.millis()
         
         // Check for any pending clicks that have expired
