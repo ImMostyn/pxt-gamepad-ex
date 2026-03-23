@@ -81,13 +81,31 @@ enum BytePositions {
  * Gamepad methods
  * This version is configured to support the DFRobot Gamepad for micro:bit v4.0
  * https://wiki.dfrobot.com/dfr0536/#tech_specs
+ * 
+ * Gamepad data is packed into a 32-bit integer:
+ * - Bits 0-7:   Button flags
+ * - Bits 8-15:  Joystick X (0-255, 128=center)
+ * - Bits 16-23: Joystick Y (0-255, 128=center)
+ * - Bits 24-31: Orientation/Gesture flags
  */
 //% weight=100 color=#ff8000 icon="\uf11b" block="Gamepad"
 namespace Gamepadex {
 
+    // Pin configuration constants for easy maintenance
+    const PIN_CONFIG = {
+        STICK_BUTTON: DigitalPin.P8,
+        GREEN_BUTTON: DigitalPin.P13,
+        YELLOW_BUTTON: DigitalPin.P14,
+        RED_BUTTON: DigitalPin.P15,
+        BLUE_BUTTON: DigitalPin.P16,
+        JOYSTICK_X: AnalogReadWritePin.P1,
+        JOYSTICK_Y: AnalogReadWritePin.P2
+    }
+
     let isBroadcasting = false
     let isListening = false
     let mode = OperatingMode.NotConfigured
+    let _radioHandlerRegistered = false
 
     let _radioGroup = 1
     let _frequency = Frequencies.TwoFiftyHz
@@ -96,12 +114,15 @@ namespace Gamepadex {
     let _lastGamepadStatus = 0
 
     let _deadzone = 4
+    let _doubleClickWindowMs = 300
+    let _debugMode = false
+    let _hasClickListeners = false
 
     // Event bus constants for button events
-    const GAMEPAD_BUTTON_PRESSED_EVENT_ID = 8800
-    const GAMEPAD_BUTTON_RELEASED_EVENT_ID = 8801
-    const GAMEPAD_BUTTON_CLICKED_EVENT_ID = 8802
-    const GAMEPAD_BUTTON_DOUBLECLICKED_EVENT_ID = 8803
+    const GAMEPAD_BUTTON_PRESSED_EVENT_ID = 9800
+    const GAMEPAD_BUTTON_RELEASED_EVENT_ID = 9801
+    const GAMEPAD_BUTTON_CLICKED_EVENT_ID = 9802
+    const GAMEPAD_BUTTON_DOUBLECLICKED_EVENT_ID = 9803
 
     // Double-click configuration
     const DOUBLE_CLICK_WINDOW_MS = 300
@@ -114,7 +135,13 @@ namespace Gamepadex {
     let _clickDetectorRunning = false
 
     /**
-     * Broadcast Gamepad status
+     * Broadcast Gamepad status at specified frequency
+     * 
+     * @param radioGroup - Radio group (1-255), defaults to 1
+     * @param frequency - Broadcast frequency, defaults to 250Hz
+     * 
+     * @example
+     * Gamepadex.startBroadcast(1, Frequencies.TwoFiftyHz)
      */
     //% block="Broadcast Gamepad | on radio group $radioGroup | at $frequency"
     //% radioGroup.defl=1 radioGroup.min = 1 radioGroup.max = 255
@@ -123,16 +150,31 @@ namespace Gamepadex {
     export function startBroadcast(radioGroup?: number, frequency?: Frequencies): void {
         if (isBroadcasting) return
 
+        // Validate parameters
+        if (radioGroup !== undefined && (radioGroup < 1 || radioGroup > 255)) {
+            radioGroup = 1  // Fall back to default
+        }
+
         if (mode == OperatingMode.NotConfigured || mode == OperatingMode.Receiver) {
             _radioGroup = radioGroup
             _frequency = frequency
 
             radio.setGroup(_radioGroup)
-            pins.setPull(DigitalPin.P8, PinPullMode.PullNone)
-            pins.setPull(DigitalPin.P13, PinPullMode.PullNone)
-            pins.setPull(DigitalPin.P14, PinPullMode.PullNone)
-            pins.setPull(DigitalPin.P15, PinPullMode.PullNone)
-            pins.setPull(DigitalPin.P16, PinPullMode.PullNone)
+
+            try {
+                // Attempt to set pull mode for all pins, in case some don't exist on certain micro:bit versions
+                pins.setPull(PIN_CONFIG.STICK_BUTTON, PinPullMode.PullNone)
+                pins.setPull(PIN_CONFIG.GREEN_BUTTON, PinPullMode.PullNone)
+                pins.setPull(PIN_CONFIG.YELLOW_BUTTON, PinPullMode.PullNone)
+                pins.setPull(PIN_CONFIG.RED_BUTTON, PinPullMode.PullNone)
+                pins.setPull(PIN_CONFIG.BLUE_BUTTON, PinPullMode.PullNone)
+            } catch (e) {
+                // Pin configuration failed - may already be in use
+                if (_debugMode) {
+                    basic.showString("Pin error")
+                }
+                return
+            }
         }
 
         isBroadcasting = true
@@ -155,6 +197,9 @@ namespace Gamepadex {
 
     /**
      * Stop broadcasting the Gamepad status
+     * 
+     * @example
+     * Gamepadex.stopBroadcast()
      */
     //% block="Stop Broadcast Gamepad"
     //% group="Sender"
@@ -170,13 +215,23 @@ namespace Gamepadex {
     }
 
     /**
-     * Receive Gamepad status messages
+     * Receive Gamepad status messages on the specified radio group.
+     * Only one instance of the radio handler is registered (singleton pattern).
+     * 
+     * @param radioGroup - Radio group (1-255), defaults to 1
+     * @example
+     * Gamepadex.startReceiving(1)
      */
     //% block="Receive Gamepad status | on group $radioGroup"
     //% radioGroup.defl=1 radioGroup.min = 1 radioGroup.max = 255
     //% group="Receiver"
     export function startReceiving(radioGroup?: number): void {
         if (isListening) return
+
+        // Validate radio group parameter
+        if (radioGroup !== undefined && (radioGroup < 1 || radioGroup > 255)) {
+            radioGroup = 1  // Fall back to default
+        }
 
         if (mode == OperatingMode.NotConfigured || mode == OperatingMode.Gamepad) {
             _radioGroup = radioGroup
@@ -193,19 +248,28 @@ namespace Gamepadex {
             mode = OperatingMode.Receiver
         }
 
-        radio.onReceivedNumber(function (receivedNumber: number){
-            //serial.writeLine("Ack: " + receivedNumber)
-            _gamepadStatus = receivedNumber
-            
-            // Start click detector if not already running
-            if (!_clickDetectorRunning) {
-                startClickDetector()
-            }
-        })
+        // Register radio handler only once (singleton pattern)
+        if (!_radioHandlerRegistered) {
+            radio.onReceivedNumber(function (receivedNumber: number){
+                if (_debugMode) {
+                    serial.writeLine("Ack: " + receivedNumber)
+                }
+                _gamepadStatus = receivedNumber
+                
+                // Start click detector if listeners are registered
+                if (_hasClickListeners && !_clickDetectorRunning) {
+                    startClickDetector()
+                }
+            })
+            _radioHandlerRegistered = true
+        }
     }
 
     /**
      * Stop receiving Gamepad status messages
+     * 
+     * @example
+     * Gamepadex.stopReceiving()
      */
     //% block="Stop Receive Gamepad"
     //% group="Receiver"
@@ -272,14 +336,14 @@ namespace Gamepadex {
                 const pressDuration = currentTime - _lastPressTime[i]
                 
                 // Only consider clicks if held briefly (< 300ms)
-                if (pressDuration <= DOUBLE_CLICK_WINDOW_MS) {
+                if (pressDuration <= _doubleClickWindowMs) {
                     // Handle click/double-click detection on release
                     const timeSinceLastRelease = currentTime - _lastReleaseTime[i]
                     
                     // Clear any pending click for this button
                     _pendingClickTime[i] = 0
                     
-                    if (timeSinceLastRelease <= DOUBLE_CLICK_WINDOW_MS) {
+                    if (timeSinceLastRelease <= _doubleClickWindowMs) {
                         // Second release within window - it's a double-click
                         _clickCount[i] = 0
                         _lastReleaseTime[i] = 0
@@ -299,7 +363,38 @@ namespace Gamepadex {
     }
 
     /**
-     * On Gamepad button pressed
+     * On Gamepad button clicked (single click on brief press/release)
+     * @param button - Button to listen for
+     * @param handler - Callback function when clicked
+     * 
+     * @example
+     * Gamepadex.onGamepadButtonClicked(ButtonFlag.AButton, function() {
+     *     basic.showString("A clicked")
+     * })
+     */
+    //% block="on Gamepad | $button | clicked"
+    //% button.defl=ButtonFlag.GreenButton
+    //% group="Receiver"
+    //% blockGap=8
+    export function onGamepadButtonClicked(button: ButtonFlag, handler: () => void): void {
+        if (!_hasClickListeners) {
+            _hasClickListeners = true
+            if (isListening && !_clickDetectorRunning) {
+                startClickDetector()
+            }
+        }
+        control.onEvent(GAMEPAD_BUTTON_CLICKED_EVENT_ID, button, handler)
+    }
+
+    /**
+     * On Gamepad button pressed (immediate on press, 0→1 transition)
+     * @param button - Button to listen for
+     * @param handler - Callback function when pressed
+     * 
+     * @example
+     * Gamepadex.onGamepadButtonPressed(ButtonFlag.AButton, function() {
+     *     basic.clearScreen()
+     * })
      */
     //% block="on Gamepad | $button | pressed"
     //% button.defl=ButtonFlag.GreenButton
@@ -310,7 +405,9 @@ namespace Gamepadex {
     }
 
     /**
-     * On Gamepad button released
+     * On Gamepad button released (immediate on release, 1→0 transition)
+     * @param button - Button to listen for
+     * @param handler - Callback function when released
      */
     //% block="on Gamepad | $button | released"
     //% button.defl=ButtonFlag.GreenButton
@@ -321,29 +418,32 @@ namespace Gamepadex {
     }
 
     /**
-     * On Gamepad button clicked
-     */
-    //% block="on Gamepad | $button | clicked"
-    //% button.defl=ButtonFlag.GreenButton
-    //% group="Receiver"
-    //% blockGap=8
-    export function onGamepadButtonClicked(button: ButtonFlag, handler: () => void): void {
-        control.onEvent(GAMEPAD_BUTTON_CLICKED_EVENT_ID, button, handler)
-    }
-
-    /**
-     * On Gamepad button double-clicked
+     * On Gamepad button double-clicked (two clicks within 300ms window)
+     * @param button - Button to listen for
+     * @param handler - Callback function when double-clicked
+     * 
+     * @example
+     * Gamepadex.onGamepadButtonDoubleClicked(ButtonFlag.AButton, function() {
+     *     basic.showString("Double!")
+     * })
      */
     //% block="on Gamepad | $button | double-clicked"
     //% button.defl=ButtonFlag.GreenButton
     //% group="Receiver"
     //% blockGap=8
     export function onGamepadButtonDoubleClicked(button: ButtonFlag, handler: () => void): void {
+        if (!_hasClickListeners) {
+            _hasClickListeners = true
+            if (isListening && !_clickDetectorRunning) {
+                startClickDetector()
+            }
+        }
         control.onEvent(GAMEPAD_BUTTON_DOUBLECLICKED_EVENT_ID, button, handler)
     }
 
     /**
-     * The registers of the gamepad state broadcast
+     * Get the current packed gamepad state register (for advanced use)
+     * Contains all button, joystick, and orientation data in 32-bit format
      */
     //% block="gamepad state"
     //% group="Receiver"
@@ -361,25 +461,62 @@ namespace Gamepadex {
     export function operatingMode(): OperatingMode {
         return mode
     }
+
+    /**
+     * Set the double-click time window
+     * @param ms - Time window in milliseconds (100-1000)
+     * 
+     * @example
+     * Gamepadex.setDoubleClickWindow(250)
+     */
+    //% block="set double-click window to $ms | ms"
+    //% ms.defl=300 ms.min=100 ms.max=1000
+    //% group="Advanced"
+    export function setDoubleClickWindow(ms: number): void {
+        _doubleClickWindowMs = Math.constrain(ms, 100, 1000)
+    }
+
+    /**
+     * Set joystick deadzone threshold
+     * @param value - Deadzone range (0-20, default 4)
+     * 
+     * @example
+     * Gamepadex.setJoystickDeadzone(5)
+     */
+    //% block="set joystick deadzone to $value"
+    //% value.defl=4 value.min=0 value.max=20
+    //% group="Advanced"
+    export function setJoystickDeadzone(value: number): void {
+        _deadzone = Math.constrain(value, 0, 20)
+    }
+
+    /**
+     * Enable or disable debug mode
+     * @param enabled - True to enable debug output
+     */
+    //% block="set debug mode $enabled"
+    //% group="Advanced"
+    export function setDebugMode(enabled: boolean): void {
+        _debugMode = enabled
+    }
     
     /**
-     * Read the pins related to buttons
-     * and pack into register of gamepad flags
+     * Read the pins related to buttons and pack into register of gamepad flags
      */
     function readButtons(): uint32 { 
         return (input.buttonIsPressed(Button.A) ? ButtonFlag.AButton : 0)
             | (input.buttonIsPressed(Button.B) ? ButtonFlag.BButton : 0)
             | (input.logoIsPressed() ? ButtonFlag.Logo : 0)
-            | (pins.digitalReadPin(DigitalPin.P13) == 0 ? ButtonFlag.GreenButton : 0)
-            | (pins.digitalReadPin(DigitalPin.P14) == 0 ? ButtonFlag.YellowButton : 0)
-            | (pins.digitalReadPin(DigitalPin.P15) == 0 ? ButtonFlag.RedButton : 0)
-            | (pins.digitalReadPin(DigitalPin.P16) == 0 ? ButtonFlag.BlueButton : 0)
-            | (pins.digitalReadPin(DigitalPin.P8) == 0 ? ButtonFlag.StickButton : 0)
+            | (pins.digitalReadPin(PIN_CONFIG.GREEN_BUTTON) == 0 ? ButtonFlag.GreenButton : 0)
+            | (pins.digitalReadPin(PIN_CONFIG.YELLOW_BUTTON) == 0 ? ButtonFlag.YellowButton : 0)
+            | (pins.digitalReadPin(PIN_CONFIG.RED_BUTTON) == 0 ? ButtonFlag.RedButton : 0)
+            | (pins.digitalReadPin(PIN_CONFIG.BLUE_BUTTON) == 0 ? ButtonFlag.BlueButton : 0)
+            | (pins.digitalReadPin(PIN_CONFIG.STICK_BUTTON) == 0 ? ButtonFlag.StickButton : 0)
         ; 
     }
 
     /**
-     * Current X position of the Joystick
+     * Current X position of the Joystick (0-255, 128=center)
      */
     //% block="Gamepad Joystick X position"
     //% group="Receiver"
@@ -388,7 +525,7 @@ namespace Gamepadex {
     }
 
     /**
-     * Current Y position of the Joystick
+     * Current Y position of the Joystick (0-255, 128=center)
      */
     //% block="Gamepad Joystick Y position"
     //% group="Receiver"
@@ -398,6 +535,7 @@ namespace Gamepadex {
 
     /**
      * Is button pressed on remote Gamepad
+     * @param button - Button to check
      */
     //% block="is Gamepad | $button | pressed"
     //%button.defl=ButtonFlag.AButton
@@ -407,7 +545,8 @@ namespace Gamepadex {
     }
 
     /**
-     * Is remote Gamepad orientated
+     * Is remote Gamepad currently oriented/gesturing
+     * @param gesture - Gesture/orientation flag to check
      */
     //% block="is Gamepad orientated | $gesture"
     //% gesture.defl=GestureFlags.Shake
@@ -417,40 +556,36 @@ namespace Gamepadex {
     }
 
     /**
-     * Analogue read of the horizontal joystic position
-     * Center if in dead zone
-     * Reduce fidelity to one bytes
-     * shift value one byte left
+     * Analogue read of the horizontal joystick position
+     * Centers if in dead zone, reduces fidelity to one byte
      */
     function conditionStickX(): uint32 { 
         // Analogue stick is 0 > 1023
         // shifting right twice trims the fidelity to 0 > 255
         // shifting eight bits left positions within the component ComponentMasks
         // ANDing the component mask ensures it is safely filtered
-        let byteX = pins.analogReadPin(AnalogReadWritePin.P1) >>> 2 
+        let byteX = pins.analogReadPin(PIN_CONFIG.JOYSTICK_X) >>> 2 
         if (byteX > (128 - _deadzone) && byteX < (128 + _deadzone)) {
             byteX = 128
         }
         return (byteX << BytePositions.HorizontalStick) & ComponentMasks.HorizontalStick
-        }
+    }
 
     /**
-     * Analogue read of the vertical joystic position
-     * Center if in dead zone
-     * Reduce fidelity to one bytes
-     * shift value two bytes left
+     * Analogue read of the vertical joystick position
+     * Centers if in dead zone, reduces fidelity to one byte
      */
     function conditionStickY(): uint32 {
         // Analogue stick is 0 > 1023
         // shifting right twice trims the fidelity to 0 > 255
         // shifting sixteen bits left positions within the component ComponentMasks
         // ANDing the component mask ensures it is safely filtered
-        let byteY = pins.analogReadPin(AnalogReadWritePin.P2) >>> 2 
+        let byteY = pins.analogReadPin(PIN_CONFIG.JOYSTICK_Y) >>> 2 
         if (byteY > (128 - _deadzone) && byteY < (128 + _deadzone)) {
             byteY = 128
         }
         return (byteY << BytePositions.VerticalStick) & ComponentMasks.VerticalStick
-        }
+    }
 
     function readOrientation(): uint32 {
         return (
@@ -475,18 +610,25 @@ namespace Gamepadex {
     }
 
     /**
-     * Obtain current gamepad flags
+     * Obtain current packed gamepad flags (for advanced use)
+     * 
+     * @example
+     * let state = Gamepadex.packedGamepadState()
      */
-    //% block
+    //% block="packed gamepad state"
     //% group="Sender"
     export function packedGamepadState(): uint32 {
-        // Add code here
         return packGamepadFlags()
     }
 
     /**
-     * Is button pressed on this Gamepad
-     * @param button to check for
+     * Is button pressed on this micro:bit's gamepad
+     * @param button - Button to check
+     * 
+     * @example
+     * if (Gamepadex.isPressedLocal(ButtonFlag.AButton)) {
+     *     basic.showString("A")
+     * }
      */
     //% block="is | $button | pressed on this micro:bit"
     //% button.defl=ButtonFlag.AButton
