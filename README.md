@@ -1,4 +1,3 @@
-
 # Gamepad Extension for micro:bit
 
 A powerful extension to add wireless gamepad/controller support to your micro:bit projects. Transmit and receive gamepad input including button states, joystick positions, and device orientation over the micro:bit radio.
@@ -15,19 +14,31 @@ A powerful extension to add wireless gamepad/controller support to your micro:bi
 
 ## Hardware Setup
 
-### Supported Gamepad
+### Supported Gamepads
 - **DFRobot Gamepad for micro:bit v4.0** ([Wiki](https://wiki.dfrobot.com/dfr0536/#tech_specs))
+- **ELECFREAKS joystick:bit** ([Product Page](https://www.elecfreaks.com/estore/elecfreaks-joystick-bit-for-micro-bit.html))
 
-### Pin Configuration
-| Component | Pin |
-|-----------|-----|
-| Joystick X | P1 (Analog) |
-| Joystick Y | P2 (Analog) |
-| Green Button | P13 |
-| Yellow Button | P14 |
-| Red Button | P15 |
-| Blue Button | P16 |
-| Stick Button | P8 |
+### Pin Configuration by Type
+
+| Component      | DFRobot Gamepad | joystick:bit |
+|---------------|:---------------:|:------------:|
+| Joystick X    | P1 (Analog)     | P1 (Analog)  |
+| Joystick Y    | P2 (Analog)     | P2 (Analog)  |
+| Green Button  | P13             | P12          |
+| Yellow Button | P14             | P13          |
+| Red Button    | P15             | P14          |
+| Blue Button   | P16             | P15          |
+| Stick Button  | P8              | ✖️           |
+| Button.A      | Onboard         | Onboard      |
+| Button.B      | Onboard         | Onboard      |
+| Logo Button   | Onboard         | Onboard      |
+
+- For **DFRobot Gamepad**, button pins are P13–P16 and stick button is P8.
+- For **joystick:bit**, button pins are P12–P15 (no stick button).
+- Joystick axes (X/Y) are always on P1/P2 for both types.
+- Onboard micro:bit buttons (A, B, Logo) are always available.
+
+---
 
 ## Installation
 
@@ -106,6 +117,48 @@ Gamepadex.setJoystickDeadzone(5)
 // Enable debug output to serial port
 Gamepadex.setDebugMode(true)
 ```
+
+## Gamepad Type Configuration
+
+This extension supports multiple hardware types. You must configure the gamepad type before broadcasting or reading input:
+
+### Supported Types
+- **DFRobot Gamepad** (default)
+- **ELECFREAKS joystick:bit**
+
+### Selecting the Gamepad Type
+
+Call this function at the start of your program:
+
+```javascript
+// For DFRobot Gamepad (default, no need to call unless switching)
+Gamepadex.setGamepadType(GamepadType.DFRobot)
+
+// For ELECFREAKS joystick:bit
+Gamepadex.setGamepadType(GamepadType.JoystickBit)
+```
+
+### Capabilities by Type
+
+| Feature         | DFRobot Gamepad | joystick:bit |
+|-----------------|:---------------:|:------------:|
+| Button.A        |       ✔️        |      ✔️      |
+| Button.B        |       ✔️        |      ✔️      |
+| Logo Button     |       ✔️        |      ✔️      |
+| Green Button    |       ✔️        |      ✔️      |
+| Yellow Button   |       ✔️        |      ✔️      |
+| Red Button      |       ✔️        |      ✔️      |
+| Blue Button     |       ✔️        |      ✔️      |
+| Stick Button    |       ✔️        |      ✖️      |
+| Joystick X/Y    |       ✔️        |      ✔️      |
+
+- On **joystick:bit**, Button.A, Button.B, and Logo are always available from the onboard micro:bit.
+- The Stick Button is only available on the DFRobot Gamepad.
+- All other buttons and joystick axes are mapped to the corresponding pins for each hardware type.
+
+### Pin Initialization
+
+The extension automatically configures the correct pins for the selected hardware type. No additional setup is required.
 
 ## API Reference
 

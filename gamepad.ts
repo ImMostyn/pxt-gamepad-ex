@@ -1,9 +1,20 @@
+
+
 /**
 * Gamepad extension
 * Intended for DFRobot Gamepad to send joystick positions, 
 * button states and orientation flags packed in 4 bytes of a 32 bit integer.
 * All at a high frequency for a listening micro:bit to be able to consume
 */
+
+enum GamepadType {
+    //% block="DFRobot Gamepad"
+    DFRobot = 0,
+    //% block="Joystick:bit"
+    JoystickBit = 1
+}
+
+let _gamepadType: GamepadType = GamepadType.DFRobot
 
 enum OperatingMode {
     NotConfigured,
@@ -91,6 +102,26 @@ enum BytePositions {
 //% weight=100 color=#ff8000 icon="\uf11b" block="Gamepad"
 namespace Gamepadex {
 
+    /**
+     * Configure which gamepad hardware to use (DFRobot or Joystick:bit)
+     * @param type the gamepad type
+     */
+    //% block="set gamepad type to $type"
+    //% type.defl=GamepadType.DFRobot
+    //% group="Configuration"
+    export function setGamepadType(type: GamepadType): void {
+        _gamepadType = type
+        if (_gamepadType == GamepadType.JoystickBit) {
+            // Minimal joystick:bit pin initialization
+            pins.digitalWritePin(DigitalPin.P0, 0)
+            pins.setPull(DigitalPin.P12, PinPullMode.PullUp)
+            pins.setPull(DigitalPin.P13, PinPullMode.PullUp)
+            pins.setPull(DigitalPin.P14, PinPullMode.PullUp)
+            pins.setPull(DigitalPin.P15, PinPullMode.PullUp)
+            pins.digitalWritePin(DigitalPin.P16, 1)
+        }
+    }
+
     // Pin configuration constants for easy maintenance
     const PIN_CONFIG = {
         STICK_BUTTON: DigitalPin.P8,
@@ -161,19 +192,29 @@ namespace Gamepadex {
 
             radio.setGroup(_radioGroup)
 
-            try {
-                // Attempt to set pull mode for all pins, in case some don't exist on certain micro:bit versions
-                pins.setPull(PIN_CONFIG.STICK_BUTTON, PinPullMode.PullNone)
-                pins.setPull(PIN_CONFIG.GREEN_BUTTON, PinPullMode.PullNone)
-                pins.setPull(PIN_CONFIG.YELLOW_BUTTON, PinPullMode.PullNone)
-                pins.setPull(PIN_CONFIG.RED_BUTTON, PinPullMode.PullNone)
-                pins.setPull(PIN_CONFIG.BLUE_BUTTON, PinPullMode.PullNone)
-            } catch (e) {
-                // Pin configuration failed - may already be in use
-                if (_debugMode) {
-                    basic.showString("Pin error")
+            if (_gamepadType == GamepadType.JoystickBit) {
+                // Minimal joystick:bit pin initialization
+                pins.digitalWritePin(DigitalPin.P0, 0)
+                pins.setPull(DigitalPin.P12, PinPullMode.PullUp)
+                pins.setPull(DigitalPin.P13, PinPullMode.PullUp)
+                pins.setPull(DigitalPin.P14, PinPullMode.PullUp)
+                pins.setPull(DigitalPin.P15, PinPullMode.PullUp)
+                pins.digitalWritePin(DigitalPin.P16, 1)
+            } else {
+                try {
+                    // Attempt to set pull mode for all pins, in case some don't exist on certain micro:bit versions
+                    pins.setPull(PIN_CONFIG.STICK_BUTTON, PinPullMode.PullNone)
+                    pins.setPull(PIN_CONFIG.GREEN_BUTTON, PinPullMode.PullNone)
+                    pins.setPull(PIN_CONFIG.YELLOW_BUTTON, PinPullMode.PullNone)
+                    pins.setPull(PIN_CONFIG.RED_BUTTON, PinPullMode.PullNone)
+                    pins.setPull(PIN_CONFIG.BLUE_BUTTON, PinPullMode.PullNone)
+                } catch (e) {
+                    // Pin configuration failed - may already be in use
+                    if (_debugMode) {
+                        basic.showString("Pin error")
+                    }
+                    return
                 }
-                return
             }
         }
 
@@ -473,7 +514,7 @@ namespace Gamepadex {
     //% ms.defl=300 ms.min=100 ms.max=1000
     //% group="Advanced"
     export function setDoubleClickWindow(ms: number): void {
-        _doubleClickWindowMs = Math.constrain(ms, 100, 1000)
+        _doubleClickWindowMs = Math.max(100, Math.min(ms, 1000))
     }
 
     /**
@@ -487,7 +528,7 @@ namespace Gamepadex {
     //% value.defl=4 value.min=0 value.max=20
     //% group="Advanced"
     export function setJoystickDeadzone(value: number): void {
-        _deadzone = Math.constrain(value, 0, 20)
+        _deadzone = Math.max(0, Math.min(value, 20))
     }
 
     /**
@@ -503,16 +544,30 @@ namespace Gamepadex {
     /**
      * Read the pins related to buttons and pack into register of gamepad flags
      */
-    function readButtons(): uint32 { 
-        return (input.buttonIsPressed(Button.A) ? ButtonFlag.AButton : 0)
-            | (input.buttonIsPressed(Button.B) ? ButtonFlag.BButton : 0)
-            | (input.logoIsPressed() ? ButtonFlag.Logo : 0)
-            | (pins.digitalReadPin(PIN_CONFIG.GREEN_BUTTON) == 0 ? ButtonFlag.GreenButton : 0)
-            | (pins.digitalReadPin(PIN_CONFIG.YELLOW_BUTTON) == 0 ? ButtonFlag.YellowButton : 0)
-            | (pins.digitalReadPin(PIN_CONFIG.RED_BUTTON) == 0 ? ButtonFlag.RedButton : 0)
-            | (pins.digitalReadPin(PIN_CONFIG.BLUE_BUTTON) == 0 ? ButtonFlag.BlueButton : 0)
-            | (pins.digitalReadPin(PIN_CONFIG.STICK_BUTTON) == 0 ? ButtonFlag.StickButton : 0)
-        ; 
+    function readButtons(): uint32 {
+        if (_gamepadType == GamepadType.JoystickBit) {
+            // Direct pin reads for joystick:bit buttons, plus micro:bit onboard buttons
+            let flags = 0
+            if (input.buttonIsPressed(Button.A)) flags |= ButtonFlag.AButton
+            if (input.buttonIsPressed(Button.B)) flags |= ButtonFlag.BButton
+            if (input.logoIsPressed()) flags |= ButtonFlag.Logo
+            if (pins.digitalReadPin(DigitalPin.P12) == 0) flags |= ButtonFlag.GreenButton
+            if (pins.digitalReadPin(DigitalPin.P13) == 0) flags |= ButtonFlag.YellowButton
+            if (pins.digitalReadPin(DigitalPin.P14) == 0) flags |= ButtonFlag.RedButton
+            if (pins.digitalReadPin(DigitalPin.P15) == 0) flags |= ButtonFlag.BlueButton
+            // No stick button on joystick:bit
+            return flags
+        } else {
+            return (input.buttonIsPressed(Button.A) ? ButtonFlag.AButton : 0)
+                | (input.buttonIsPressed(Button.B) ? ButtonFlag.BButton : 0)
+                | (input.logoIsPressed() ? ButtonFlag.Logo : 0)
+                | (pins.digitalReadPin(PIN_CONFIG.GREEN_BUTTON) == 0 ? ButtonFlag.GreenButton : 0)
+                | (pins.digitalReadPin(PIN_CONFIG.YELLOW_BUTTON) == 0 ? ButtonFlag.YellowButton : 0)
+                | (pins.digitalReadPin(PIN_CONFIG.RED_BUTTON) == 0 ? ButtonFlag.RedButton : 0)
+                | (pins.digitalReadPin(PIN_CONFIG.BLUE_BUTTON) == 0 ? ButtonFlag.BlueButton : 0)
+                | (pins.digitalReadPin(PIN_CONFIG.STICK_BUTTON) == 0 ? ButtonFlag.StickButton : 0)
+            ;
+        }
     }
 
     /**
@@ -559,12 +614,13 @@ namespace Gamepadex {
      * Analogue read of the horizontal joystick position
      * Centers if in dead zone, reduces fidelity to one byte
      */
-    function conditionStickX(): uint32 { 
-        // Analogue stick is 0 > 1023
-        // shifting right twice trims the fidelity to 0 > 255
-        // shifting eight bits left positions within the component ComponentMasks
-        // ANDing the component mask ensures it is safely filtered
-        let byteX = pins.analogReadPin(PIN_CONFIG.JOYSTICK_X) >>> 2 
+    function conditionStickX(): uint32 {
+        let byteX: number
+        if (_gamepadType == GamepadType.JoystickBit) {
+            byteX = pins.analogReadPin(AnalogPin.P1) >>> 2
+        } else {
+            byteX = pins.analogReadPin(PIN_CONFIG.JOYSTICK_X) >>> 2
+        }
         if (byteX > (128 - _deadzone) && byteX < (128 + _deadzone)) {
             byteX = 128
         }
@@ -576,11 +632,12 @@ namespace Gamepadex {
      * Centers if in dead zone, reduces fidelity to one byte
      */
     function conditionStickY(): uint32 {
-        // Analogue stick is 0 > 1023
-        // shifting right twice trims the fidelity to 0 > 255
-        // shifting sixteen bits left positions within the component ComponentMasks
-        // ANDing the component mask ensures it is safely filtered
-        let byteY = pins.analogReadPin(PIN_CONFIG.JOYSTICK_Y) >>> 2 
+        let byteY: number
+        if (_gamepadType == GamepadType.JoystickBit) {
+            byteY = pins.analogReadPin(AnalogPin.P2) >>> 2
+        } else {
+            byteY = pins.analogReadPin(PIN_CONFIG.JOYSTICK_Y) >>> 2
+        }
         if (byteY > (128 - _deadzone) && byteY < (128 + _deadzone)) {
             byteY = 128
         }
