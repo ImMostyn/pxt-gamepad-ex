@@ -2,12 +2,7 @@
     "name": "gamepad-ex",
     "version": "2.0.0",
     "description": "This extension adds gamepad support to the micro:bit. It allows you to connect a gamepad to the micro:bit and use it to control your projects.",
-    "author": "immostyn",
     "license": "MIT",
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/immostyn/pxt-gamepad-ex"
-    },
     "dependencies": {
         "core": "*",
         "radio": "*"
@@ -28,5 +23,10 @@
     "supportedTargets": [
         "microbit"
     ],
-    "preferredEditor": "tsprj"
+    "preferredEditor": "tsprj",
+    "author": "immostyn",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/immostyn/pxt-gamepad-ex"
+    }
 }
