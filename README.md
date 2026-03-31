@@ -9,6 +9,9 @@ A powerful extension to add wireless gamepad/controller support to your micro:bi
 - **Event-Driven Architecture** — Four event types: pressed, released, clicked, double-clicked
 - **Smart Click Detection** — Distinguishes between quick clicks and long holds
 - **Orientation/Gestures** — Read shake, tilt, and acceleration events
+- **Bidirectional Feedback** — Receive display, sound, and vibration commands from game
+- **Grayscale Images** — Display 5x5 LED matrix images with 0-9 brightness levels
+- **Message Queue** — Handle multiple feedback messages with interrupt capability
 - **Configurable** — Adjust double-click window and joystick deadzone at runtime
 - **Low Latency** — Supports frequencies up to 500Hz for responsive gameplay
 
@@ -118,6 +121,99 @@ Gamepadex.setJoystickDeadzone(5)
 Gamepadex.setDebugMode(true)
 ```
 
+## Feedback System
+
+The gamepad can now receive feedback messages from games to display images, play sounds, and trigger vibration. This creates a more immersive gaming experience with visual and haptic feedback.
+
+### Enabling Feedback
+
+On the **gamepad** (sender), enable feedback reception:
+
+```javascript
+// Enable feedback with vibration motor on P0
+Gamepadex.enableFeedback(DigitalPin.P0)
+
+// Enable/disable sound feedback
+Gamepadex.setFeedbackSound(true)
+
+// Start broadcasting as usual
+Gamepadex.startBroadcast(1, Frequencies.TwoFiftyHz)
+```
+
+### Sending Feedback from Game
+
+On the **receiver** (game micro:bit), send feedback messages:
+
+```javascript
+// Send grayscale image (25 chars, 0-9 brightness)
+radio.sendString("IMG:0090009090999990909000900")
+
+// Send text message
+radio.sendString("TXT:Level Up!")
+
+// Play sound (frequency:duration)
+radio.sendString("SND:1046:200")
+
+// Trigger vibration (duration in ms)
+radio.sendString("VIB:100")
+
+// Clear display
+radio.sendString("CLR")
+
+// Interrupt current message (prefix with !)
+radio.sendString("!TXT:Game Over!")
+```
+
+### Grayscale Image Format
+
+Images are 5x5 LED matrices with brightness levels 0-9:
+- `0` = Off
+- `1-9` = Increasing brightness
+- String length must be exactly 25 characters
+
+Example - Target crosshair:
+```
+  0 9 0     00900
+  9 9 9  =  99999  = "0090099999999990090000000"
+0 9 9 9 0    99999
+  9 9 9     99999
+  0 9 0     00900
+```
+
+### Animation Support
+
+Send multiple frames separated by `|` with delay:
+
+```javascript
+// Spinner animation (3 frames, 100ms delay)
+radio.sendString("ANI:9000000000000000000000000|0900000000000000000000000|0090000000000000000000000:100")
+```
+
+### Message Queue System
+
+- Messages are queued and processed in order
+- Text messages are non-interruptible (play to completion)
+- Image messages are interruptible
+- Prefix message with `!` to interrupt and clear queue
+- Example: `!TXT:URGENT!` clears queue and displays immediately
+
+### Feedback Protocol Reference
+
+| Command | Format | Description | Example |
+|---------|--------|-------------|---------|
+| `IMG` | `IMG:<25-chars>` | Display grayscale image | `IMG:0090009090999990909000900` |
+| `TXT` | `TXT:<message>` | Display scrolling text | `TXT:Score: 100` |
+| `SND` | `SND:<freq>:<ms>` | Play tone | `SND:1046:200` |
+| `VIB` | `VIB:<ms>` | Vibrate motor | `VIB:100` |
+| `CLR` | `CLR` | Clear display | `CLR` |
+| `ANI` | `ANI:<frames>:<ms>` | Play animation | `ANI:frame1\|frame2:200` |
+
+### Hardware Requirements for Feedback
+
+- **Display**: Built-in 5x5 LED matrix (always available)
+- **Sound**: Built-in speaker/buzzer (V2) or external piezo buzzer
+- **Vibration**: External vibration motor connected to configured pin
+
 ## Gamepad Type Configuration
 
 This extension supports multiple hardware types. You must configure the gamepad type before broadcasting or reading input:
@@ -226,6 +322,18 @@ The extension automatically configures the correct pins for the selected hardwar
 **`setDebugMode(enabled: boolean)`**
 - Enable/disable debug output to serial console
 
+### Feedback Functions
+
+**`enableFeedback(vibratePin?: DigitalPin)`**
+- Enable feedback system to receive messages from game
+- Optionally specify pin for vibration motor
+
+**`disableFeedback()`**
+- Disable feedback message reception
+
+**`setFeedbackSound(enabled: boolean)`**
+- Enable/disable sound feedback on gamepad
+
 ## Architecture
 
 ### Data Format
@@ -271,6 +379,13 @@ The extension uses a singleton pattern for the radio receiver to prevent multipl
 
 ## Version History
 
+- **2.0.0** (2026-03-31) — Feedback System Release
+  - Added bidirectional communication (game → gamepad)
+  - Grayscale image display support (0-9 brightness)
+  - Sound and vibration feedback
+  - Message queue with interrupt capability
+  - Animation support
+  - Comprehensive feedback protocol
 - **1.0.0** (2026-03-23) — Initial production release
   - Fixed radio handler registration (singleton pattern)
   - Added parameter validation

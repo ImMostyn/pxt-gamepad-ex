@@ -693,4 +693,210 @@ namespace Gamepadex {
     export function isPressedLocal(button: ButtonFlag): boolean {
         return !!(readButtons() & button)
     }
+
+    // ============================================================
+    // FEEDBACK SYSTEM (Receiver → Gamepad Communication)
+    // ============================================================
+
+    let _feedbackEnabled = false
+    let _vibratePin: DigitalPin = null
+    let _soundEnabled = true
+    let _messageQueue: string[] = []
+    let _currentMessageInterruptible = true
+    let _processingMessage = false
+
+    /**
+     * Enable feedback system to receive messages from game
+     * @param vibratePin Optional pin for vibration motor (e.g., DigitalPin.P0)
+     */
+    //% block="enable gamepad feedback | vibrate pin $vibratePin"
+    //% vibratePin.defl=DigitalPin.P0
+    //% group="Feedback"
+    //% weight=100
+    export function enableFeedback(vibratePin?: DigitalPin): void {
+        if (_feedbackEnabled) return
+        
+        _feedbackEnabled = true
+        _vibratePin = vibratePin
+        
+        radio.onReceivedString(function (receivedString: string) {
+            if (_debugMode) {
+                serial.writeLine("Feedback: " + receivedString)
+            }
+            processFeedbackMessage(receivedString)
+        })
+    }
+
+    /**
+     * Disable feedback system
+     */
+    //% block="disable gamepad feedback"
+    //% group="Feedback"
+    //% weight=99
+    export function disableFeedback(): void {
+        _feedbackEnabled = false
+        _messageQueue = []
+    }
+
+    /**
+     * Enable or disable sound feedback
+     * @param enabled True to enable sound
+     */
+    //% block="set gamepad sound $enabled"
+    //% enabled.shadow="toggleOnOff"
+    //% group="Feedback"
+    //% weight=98
+    export function setFeedbackSound(enabled: boolean): void {
+        _soundEnabled = enabled
+    }
+
+    /**
+     * Process incoming feedback message
+     */
+    function processFeedbackMessage(message: string): void {
+        if (!_feedbackEnabled) return
+        
+        // Check if message should interrupt current display
+        let shouldInterrupt = message.indexOf("!") === 0
+        if (shouldInterrupt) {
+            message = message.substr(1)  // Remove ! prefix
+        }
+        
+        if (shouldInterrupt && _currentMessageInterruptible) {
+            // Clear queue and process immediately
+            _messageQueue = [message]
+            if (!_processingMessage) {
+                processNextMessage()
+            }
+        } else {
+            // Add to queue
+            _messageQueue.push(message)
+            if (!_processingMessage) {
+                processNextMessage()
+            }
+        }
+    }
+
+    /**
+     * Process next message in queue
+     */
+    function processNextMessage(): void {
+        if (_messageQueue.length === 0) {
+            _processingMessage = false
+            return
+        }
+        
+        _processingMessage = true
+        let message = _messageQueue.shift()
+        
+        // Parse command format: CMD:PARAM1:PARAM2:...
+        let parts = message.split(":")
+        let command = parts[0]
+        
+        if (command === "IMG") {
+            // Display grayscale image
+            displayGrayscaleImage(parts[1])
+        } else if (command === "TXT") {
+            // Display scrolling text
+            displayText(parts[1])
+        } else if (command === "SND") {
+            // Play sound
+            if (_soundEnabled && parts.length >= 3) {
+                playFeedbackSound(parseInt(parts[1]), parseInt(parts[2]))
+            }
+        } else if (command === "VIB") {
+            // Vibrate
+            if (_vibratePin && parts.length >= 2) {
+                vibrate(parseInt(parts[1]))
+            }
+        } else if (command === "CLR") {
+            // Clear display
+            basic.clearScreen()
+        } else if (command === "ANI") {
+            // Animation (frames separated by |, delay in last part)
+            if (parts.length >= 2) {
+                let frames = parts[1].split("|")
+                let delay = parts.length >= 3 ? parseInt(parts[2]) : 200
+                playAnimation(frames, delay)
+            }
+        }
+        
+        // Process next message after a short delay
+        control.inBackground(function() {
+            basic.pause(100)
+            processNextMessage()
+        })
+    }
+
+    /**
+     * Display grayscale image on LED matrix
+     * @param data 25-character string with brightness values 0-9
+     */
+    function displayGrayscaleImage(data: string): void {
+        if (!data || data.length !== 25) return
+        
+        _currentMessageInterruptible = true
+        
+        for (let row = 0; row < 5; row++) {
+            for (let col = 0; col < 5; col++) {
+                let index = row * 5 + col
+                let brightness = parseInt(data.charAt(index))
+                
+                // Map 0-9 to 0-255 brightness
+                let ledBrightness = Math.min(255, brightness * 28)
+                led.plotBrightness(col, row, ledBrightness)
+            }
+        }
+    }
+
+    /**
+     * Display scrolling text
+     * @param text Text to display
+     */
+    function displayText(text: string): void {
+        if (!text) return
+        _currentMessageInterruptible = false
+        basic.showString(text)
+        _currentMessageInterruptible = true
+    }
+
+    /**
+     * Play feedback sound
+     * @param frequency Frequency in Hz
+     * @param duration Duration in milliseconds
+     */
+    function playFeedbackSound(frequency: number, duration: number): void {
+        if (!_soundEnabled) return
+        music.playTone(frequency, duration)
+    }
+
+    /**
+     * Vibrate motor
+     * @param duration Duration in milliseconds
+     */
+    function vibrate(duration: number): void {
+        if (!_vibratePin) return
+        
+        pins.digitalWritePin(_vibratePin, 1)
+        basic.pause(duration)
+        pins.digitalWritePin(_vibratePin, 0)
+    }
+
+    /**
+     * Play animation frames
+     * @param frames Array of 25-character grayscale strings
+     * @param delay Delay between frames in milliseconds
+     */
+    function playAnimation(frames: string[], delay: number): void {
+        _currentMessageInterruptible = false
+        
+        for (let frame of frames) {
+            if (frame.length === 25) {
+                displayGrayscaleImage(frame)
+                basic.pause(delay)
+            }
+        }
+        
+        _currentMessageInterruptible = true
+    }
 }
