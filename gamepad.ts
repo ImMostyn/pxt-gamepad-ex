@@ -137,6 +137,8 @@ namespace Gamepadex {
     let isListening = false
     let mode = OperatingMode.NotConfigured
     let _radioHandlerRegistered = false
+    let _radioNumberHandlerRegistered = false
+    let _radioStringHandlerRegistered = false
 
     let _radioGroup = 1
     let _frequency = Frequencies.TwoFiftyHz
@@ -289,11 +291,11 @@ namespace Gamepadex {
             mode = OperatingMode.Receiver
         }
 
-        // Register radio handler only once (singleton pattern)
-        if (!_radioHandlerRegistered) {
+        // Register radio number handler only once (singleton pattern)
+        if (!_radioNumberHandlerRegistered) {
             radio.onReceivedNumber(function (receivedNumber: number){
                 if (_debugMode) {
-                    serial.writeLine("Ack: " + receivedNumber)
+                    serial.writeLine("Gamepad: " + receivedNumber)
                 }
                 _gamepadStatus = receivedNumber
                 
@@ -302,6 +304,7 @@ namespace Gamepadex {
                     startClickDetector()
                 }
             })
+            _radioNumberHandlerRegistered = true
             _radioHandlerRegistered = true
         }
     }
@@ -719,12 +722,16 @@ namespace Gamepadex {
         _feedbackEnabled = true
         _vibratePin = vibratePin
         
-        radio.onReceivedString(function (receivedString: string) {
-            if (_debugMode) {
-                serial.writeLine("Feedback: " + receivedString)
-            }
-            processFeedbackMessage(receivedString)
-        })
+        // Register radio string handler only once (singleton pattern)
+        if (!_radioStringHandlerRegistered) {
+            radio.onReceivedString(function (receivedString: string) {
+                if (_debugMode) {
+                    serial.writeLine("Feedback: " + receivedString)
+                }
+                processFeedbackMessage(receivedString)
+            })
+            _radioStringHandlerRegistered = true
+        }
     }
 
     /**
@@ -754,13 +761,16 @@ namespace Gamepadex {
      * Process incoming feedback message
      */
     function processFeedbackMessage(message: string): void {
-        if (!_feedbackEnabled) return
+        if (!_feedbackEnabled || !message) return
         
         // Check if message should interrupt current display
         let shouldInterrupt = message.indexOf("!") === 0
         if (shouldInterrupt) {
             message = message.substr(1)  // Remove ! prefix
         }
+        
+        // Validate message after removing interrupt flag
+        if (!message || message.length === 0) return
         
         if (shouldInterrupt && _currentMessageInterruptible) {
             // Clear queue and process immediately
@@ -833,14 +843,25 @@ namespace Gamepadex {
      * @param data 25-character string with brightness values 0-9
      */
     function displayGrayscaleImage(data: string): void {
-        if (!data || data.length !== 25) return
+        if (!data || data.length !== 25) {
+            if (_debugMode) {
+                serial.writeLine("Invalid image data length: " + (data ? data.length : 0))
+            }
+            return
+        }
         
         _currentMessageInterruptible = true
         
         for (let row = 0; row < 5; row++) {
             for (let col = 0; col < 5; col++) {
                 let index = row * 5 + col
-                let brightness = parseInt(data.charAt(index))
+                let char = data.charAt(index)
+                let brightness = parseInt(char)
+                
+                // Validate brightness value
+                if (isNaN(brightness) || brightness < 0 || brightness > 9) {
+                    brightness = 0
+                }
                 
                 // Map 0-9 to 0-255 brightness
                 let ledBrightness = Math.min(255, brightness * 28)

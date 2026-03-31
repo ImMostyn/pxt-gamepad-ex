@@ -40,6 +40,7 @@ A powerful extension to add wireless gamepad/controller support to your micro:bi
 - For **joystick:bit**, button pins are P12–P15 (no stick button).
 - Joystick axes (X/Y) are always on P1/P2 for both types.
 - Onboard micro:bit buttons (A, B, Logo) are always available.
+- **Vibration motor** (optional) can be connected to any free pin, configured via `enableFeedback(pin)`. Recommended: P0 or P8.
 
 ---
 
@@ -362,20 +363,54 @@ The extension uses a singleton pattern for the radio receiver to prevent multipl
 - Check that broadcaster called `startBroadcast()` and receiver called `startReceiving()`
 - Verify radio antenna signal strength (avoid metal objects nearby)
 - Check serial console output with `setDebugMode(true)`
+- Ensure devices are within range (typically 10-30 meters)
 
 ### Buttons not responding
-- Verify pins P8, P13-P16 are available
+- Verify pins P8, P13-P16 are available (DFRobot) or P12-P15 (Joystick:bit)
 - Check gamepad hardware connections
 - Try `setDebugMode(true)` to see incoming data
+- Use `isPressedLocal()` to test buttons directly on gamepad
 
 ### Double-click not working
-- Adjust time window with `setDoubleClickWindow()`
-- Default is 300ms; try shorter window if presses are too quick
+- Adjust time window with `setDoubleClickWindow()` (default 300ms)
+- Try shorter window if presses are too quick
 - Ensure both clicks are brief (< 300ms hold time)
+- Check that you're using `onGamepadButtonDoubleClicked()`, not `onGamepadButtonClicked()`
 
 ### Joystick values jumping around
-- Increase deadzone with `setJoystickDeadzone()` (default: 4)
+- Increase deadzone with `setJoystickDeadzone()` (default: 4, try 8-10)
 - Higher values = larger center "dead zone" = more stable values
+- Check joystick hardware for wear or dirt
+
+### Feedback not working
+- Verify both micro:bits are on **same radio group**
+- Ensure gamepad has `enableFeedback()` called **before** `startBroadcast()`
+- Check game is sending **strings**, not numbers: `radio.sendString("TXT:Test")`
+- Verify feedback is enabled with debug mode: `setDebugMode(true)`
+- Test manually from game: `radio.sendString("CLR")` should clear gamepad display
+
+### Vibration not working
+- Check vibration motor is connected to correct pin
+- Verify pin specified in `enableFeedback(vibratePin)`
+- Test motor directly: `pins.digitalWritePin(DigitalPin.P0, 1)` should activate it
+- Ensure motor has sufficient power (may need external power source)
+
+### Images not displaying correctly
+- Verify image string is exactly 25 characters (5×5 grid)
+- Each character must be 0-9 (brightness level)
+- Example valid image: `"0000000000999000000000000"` (3 dots in center)
+- Check for typos in image data
+
+### Messages seem delayed
+- Message queue processes sequentially - text messages play to completion
+- Clear queue with interrupt flag: `radio.sendString("!CLR")`
+- Limit message frequency from game (every 5th hit, not every hit)
+- Text messages are non-interruptible by design
+
+### Radio interference
+- Multiple micro:bits on same radio group will all receive messages
+- Change radio group to avoid conflicts: `setRadioGroup(42)`
+- Keep devices away from WiFi routers and other 2.4GHz devices
 
 ## Version History
 
